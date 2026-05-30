@@ -1,0 +1,16 @@
+{
+  "name": "happy-eid-vodafone-cash",
+  "version": "1.0.0",
+  "description": "Happy Eid screen styled after Vodafone Cash Egypt, responsive MVC application.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "node --watch app.js"
+  },
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.21.1"
+  },
+  "author": "Antigravity",
+  "license": "ISC"
+}

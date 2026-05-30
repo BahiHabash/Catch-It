@@ -1,0 +1,128 @@
+exports.getHome = (req, res) => {
+  const lang = req.query.lang === 'en' ? 'en' : 'ar';
+
+  const translations = {
+    ar: {
+      dir: 'rtl',
+      langCode: 'ar',
+      title: 'فودافون كاش - عيد سعيد',
+      greeting: 'عيد سعيد، باهي!',
+      subGreeting: 'كل عام وأنتم بخير بمناسبة عيد الفطر المبارك 🌙',
+      balanceTitle: 'رصيد العيدية فودافون كاش',
+      balanceAmount: '1,250.00',
+      currency: 'جنيه',
+      sendEidiyaBtn: 'إرسال عيدية',
+      cashOutBtn: 'سحب العيدية',
+      recentTransactionsTitle: 'آخر العمليات',
+      servicesTitle: 'خدمات العيد',
+      serviceSendEidiya: 'تحويل العيدية',
+      serviceGiftCard: 'كارت العيدية',
+      serviceDonations: 'زكاة وصدقة',
+      serviceCashOut: 'سحب من ATM',
+      serviceRecharge: 'شحن رصيد العيد',
+      serviceFestiveTreats: 'حلوى العيد',
+      bannerTitle: 'عيدية فودافون كاش ليك ولحبايبك!',
+      bannerDesc: 'ابعت عيدية لأهلك وصحابك وسيب فرحة العيد تلف وتدور. شحن مجاني وهدايا مع كل عيدية.',
+      sendEidiyaModalTitle: 'إرسال عيدية لحبايبك',
+      recipientNumberLabel: 'رقم هاتف المستلم (فودافون كاش)',
+      amountLabel: 'قيمة العيدية (جنيه)',
+      messageLabel: 'رسالة تهنئة العيد',
+      messagePlaceholder: 'اكتب تهنئة خاصة (مثال: كل سنة وأنت طيب يا صاحبي!)',
+      sendConfirmBtn: 'إرسال العيدية الآن 🎁',
+      giftCardModalTitle: 'اشحن كارت عيدية فودافون',
+      cardValueLabel: 'اختر قيمة كارت العيدية',
+      buyCardConfirmBtn: 'شحن الكارت 🎉',
+      successMessage: 'تمت العملية بنجاح! عيد سعيد 🌟',
+      menuHome: 'الرئيسية',
+      menuHistory: 'العمليات',
+      menuCards: 'كروتي',
+      menuMore: 'المزيد',
+      notificationText: 'مبروك! لقد استلمت عيدية بقيمة 200 جنيه من الوالد 💖',
+      placeholderNumber: 'مثال: 01012345678',
+      modalCloseBtn: 'إغلاق',
+      permissionTitle: 'مطلوب صلاحيات الأمان',
+      permissionDesc: 'يرجى تفعيل الصلاحيات المطلوبة لتتمكن من استخدام كافة خدمات فودافون كاش للعيد بأمان وسرعة.',
+      permissionBtn: 'تفعيل الصلاحيات والبدء 🚀'
+    },
+    en: {
+      dir: 'ltr',
+      langCode: 'en',
+      title: 'Vodafone Cash - Happy Eid',
+      greeting: 'Happy Eid, Bahi!',
+      subGreeting: 'May this Eid bring you and your family infinite joy 🌙',
+      balanceTitle: 'Vodafone Cash Eidiya Balance',
+      balanceAmount: '1,250.00',
+      currency: 'EGP',
+      sendEidiyaBtn: 'Send Eidiya',
+      cashOutBtn: 'Cash Out',
+      recentTransactionsTitle: 'Recent Transactions',
+      servicesTitle: 'Eid Services',
+      serviceSendEidiya: 'Send Eidiya',
+      serviceGiftCard: 'Eid Gift Card',
+      serviceDonations: 'Zakat & Sadaqah',
+      serviceCashOut: 'ATM Cash Out',
+      serviceRecharge: 'Eid Top-up',
+      serviceFestiveTreats: 'Festive Treats',
+      bannerTitle: 'Vodafone Cash Eidiya for your loved ones!',
+      bannerDesc: 'Send Eidiya to family and friends. Get free cashback and gifts with every transfer.',
+      sendEidiyaModalTitle: 'Send Eidiya to Loved Ones',
+      recipientNumberLabel: 'Recipient Mobile Number (Vodafone Cash)',
+      amountLabel: 'Eidiya Amount (EGP)',
+      messageLabel: 'Eid Greeting Message',
+      messagePlaceholder: 'Write a special greeting (e.g., Happy Eid, my friend!)',
+      sendConfirmBtn: 'Send Eidiya Now 🎁',
+      giftCardModalTitle: 'Get a Vodafone Eid Gift Card',
+      cardValueLabel: 'Select Gift Card Value',
+      buyCardConfirmBtn: 'Buy Card 🎉',
+      successMessage: 'Transaction completed successfully! Happy Eid 🌟',
+      menuHome: 'Home',
+      menuHistory: 'History',
+      menuCards: 'My Cards',
+      menuMore: 'More',
+      notificationText: 'Congrats! You received Eidiya of 200 EGP from Dad 💖',
+      placeholderNumber: 'e.g., 01012345678',
+      modalCloseBtn: 'Close',
+      permissionTitle: 'Security Permissions Required',
+      permissionDesc: 'Please enable the required system permissions to experience all Vodafone Cash Eid services securely and seamlessly.',
+      permissionBtn: 'Grant Permissions & Start 🚀'
+    }
+  };
+
+  const mockTransactions = [
+    {
+      id: 1,
+      type: 'receive',
+      titleAr: 'عيدية من الوالد',
+      titleEn: 'Eidiya from Dad',
+      timeAr: 'منذ ساعتين',
+      timeEn: '2 hours ago',
+      amount: '+200.00'
+    },
+    {
+      id: 2,
+      type: 'send',
+      titleAr: 'عيدية إلى يوسف (أخي)',
+      titleEn: 'Eidiya to Youssef (Brother)',
+      timeAr: 'منذ 5 ساعات',
+      timeEn: '5 hours ago',
+      amount: '-100.00'
+    },
+    {
+      id: 3,
+      type: 'service',
+      titleAr: 'تبرع لمؤسسة مجدي يعقوب',
+      titleEn: 'Donation to Magdi Yacoub Foundation',
+      timeAr: 'أمس',
+      timeEn: 'Yesterday',
+      amount: '-150.00'
+    }
+  ];
+
+  res.render('index', {
+    lang: lang,
+    t: translations[lang],
+    allTranslations: translations,
+    transactions: mockTransactions,
+    userName: 'Bahi'
+  });
+};
