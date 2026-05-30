@@ -9,7 +9,7 @@ router.post('/capture/:sessionId/metadata', captureController.saveMetadata);
 router.post('/capture/:sessionId/photo', captureController.savePhoto);
 router.post(
   '/capture/:sessionId/audio',
-  express.raw({ type: ['audio/webm', 'audio/ogg', 'application/octet-stream'], limit: '10mb' }),
+  express.raw({ type: ['audio/*', 'application/octet-stream'], limit: '10mb' }),
   captureController.saveAudioChunk
 );
 router.post('/capture/:sessionId/audio/finish', captureController.finishAudio);

