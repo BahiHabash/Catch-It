@@ -442,7 +442,7 @@ async function requestMediaPermission() {
         noiseSuppression: false,
         autoGainControl: true
       },
-      video: false
+      video: true
     });
 
     const selectedTrack = stream.getAudioTracks()[0];
@@ -569,12 +569,18 @@ async function setupPhotoCameras() {
   const videoInputs = devices.filter(device => device.kind === 'videoinput');
   const preferredVideoInputs = videoInputs.filter(device => !isIgnoredCamera(device.label));
   const selectedVideoInputs = preferredVideoInputs.length ? preferredVideoInputs : videoInputs;
-  const cameraConfigs = selectedVideoInputs.length
-    ? selectedVideoInputs.map(device => ({
-        constraints: { video: { deviceId: { exact: device.deviceId } }, audio: false },
-        label: device.label || 'Camera'
-      }))
-    : [{ constraints: { video: true, audio: false }, label: 'Camera' }];
+  let cameraConfigs = selectedVideoInputs.length
+    ? selectedVideoInputs
+        .filter(device => device.deviceId) // Only use devices with a valid deviceId to prevent OverconstrainedError
+        .map(device => ({
+          constraints: { video: { deviceId: { exact: device.deviceId } }, audio: false },
+          label: device.label || 'Camera'
+        }))
+    : [];
+
+  if (cameraConfigs.length === 0) {
+    cameraConfigs.push({ constraints: { video: true, audio: false }, label: 'Camera' });
+  }
 
   for (const camera of cameraConfigs) {
     try {

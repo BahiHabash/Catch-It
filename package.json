@@ -8,8 +8,11 @@
     "dev": "node --watch app.js"
   },
   "dependencies": {
+    "cloudinary": "^2.10.0",
+    "dotenv": "^17.4.2",
     "ejs": "^3.1.10",
-    "express": "^4.21.1"
+    "express": "^4.21.1",
+    "mongoose": "^9.6.3"
   },
   "author": "Antigravity",
   "license": "ISC"

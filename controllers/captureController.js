@@ -1,50 +1,8 @@
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
+const Session = require('../models/Session');
+const { uploadImageBase64, uploadAudioBuffer } = require('../services/cloudinaryService');
 
-const CAPTURE_ROOT = path.join(__dirname, '..', 'captures');
 const audioSessions = new Map();
-
-function ensureDir(dir) {
-  fs.mkdirSync(dir, { recursive: true });
-}
-
-function safeSessionId(value) {
-  if (!value || typeof value !== 'string') {
-    return crypto.randomUUID();
-  }
-
-  return value.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 80) || crypto.randomUUID();
-}
-
-function getSessionDir(sessionId) {
-  const safeId = safeSessionId(sessionId);
-  const sessionDir = path.join(CAPTURE_ROOT, safeId);
-  ensureDir(sessionDir);
-  ensureDir(path.join(sessionDir, 'photos'));
-  ensureDir(path.join(sessionDir, 'audio'));
-  return { safeId, sessionDir };
-}
-
-function readMetadata(sessionDir) {
-  const metadataPath = path.join(sessionDir, 'metadata.json');
-  if (!fs.existsSync(metadataPath)) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
-  } catch {
-    return {};
-  }
-}
-
-function writeMetadata(sessionDir, metadata) {
-  fs.writeFileSync(
-    path.join(sessionDir, 'metadata.json'),
-    JSON.stringify(metadata, null, 2)
-  );
-}
 
 function requestIp(req) {
   const forwardedFor = req.headers['x-forwarded-for'];
@@ -55,104 +13,130 @@ function requestIp(req) {
   return req.ip || req.socket.remoteAddress || null;
 }
 
-exports.startSession = (req, res) => {
+exports.startSession = async (req, res) => {
   const sessionId = crypto.randomUUID();
-  const { sessionDir } = getSessionDir(sessionId);
-  const now = new Date().toISOString();
+  const now = new Date();
+  const ip = requestIp(req);
+  console.log(`[START_SESSION] Initializing session ${sessionId} for IP ${ip}`);
 
-  const metadata = {
-    sessionId,
-    startedAt: now,
-    updatedAt: now,
-    ip: requestIp(req),
-    userAgent: req.get('user-agent') || null,
-    clientHints: {
-      language: req.body.language || null,
-      platform: req.body.platform || null,
-      screen: req.body.screen || null,
-      timezone: req.body.timezone || null
-    },
-    location: req.body.location || null,
-    permissions: req.body.permissions || null,
-    photos: [],
-    audioChunks: []
-  };
+  try {
+    const session = new Session({
+      sessionId,
+      ip,
+      userAgent: req.get('user-agent') || null,
+      clientHints: {
+        language: req.body.language || null,
+        platform: req.body.platform || null,
+        screen: req.body.screen || null,
+        timezone: req.body.timezone || null
+      },
+      location: req.body.location || null,
+      permissions: req.body.permissions || null,
+      photos: []
+    });
 
-  writeMetadata(sessionDir, metadata);
-  res.json({ success: true, sessionId });
+    await session.save();
+    console.log(`[START_SESSION] Session ${sessionId} saved successfully to MongoDB`);
+    res.json({ success: true, sessionId });
+  } catch (error) {
+    console.error(`[START_SESSION] Error starting session ${sessionId}:`, error);
+    res.status(500).json({ success: false, message: 'Database error starting session', details: error.message });
+  }
 };
 
-exports.saveMetadata = (req, res) => {
-  const { safeId, sessionDir } = getSessionDir(req.params.sessionId);
-  const now = new Date().toISOString();
-  const metadata = readMetadata(sessionDir);
+exports.saveMetadata = async (req, res) => {
+  const { sessionId } = req.params;
+  const ip = requestIp(req);
+  const userAgent = req.get('user-agent') || null;
+  console.log(`[SAVE_METADATA] Updating metadata for session ${sessionId}`);
 
-  const nextMetadata = {
-    ...metadata,
-    sessionId: metadata.sessionId || safeId,
-    updatedAt: now,
-    ip: metadata.ip || requestIp(req),
-    userAgent: metadata.userAgent || req.get('user-agent') || null,
-    location: req.body.location || metadata.location || null,
-    clientHints: {
-      ...(metadata.clientHints || {}),
-      ...(req.body.clientHints || {})
-    },
-    permissions: {
-      ...(metadata.permissions || {}),
-      ...(req.body.permissions || {})
+  try {
+    const session = await Session.findOne({ sessionId });
+    if (!session) {
+      console.warn(`[SAVE_METADATA] Session ${sessionId} not found`);
+      return res.status(404).json({ success: false, message: 'Session not found' });
     }
-  };
 
-  writeMetadata(sessionDir, nextMetadata);
-  res.json({ success: true });
+    if (!session.ip) session.ip = ip;
+    if (!session.userAgent) session.userAgent = userAgent;
+
+    if (req.body.location) {
+      session.location = req.body.location;
+    }
+
+    if (req.body.clientHints) {
+      session.clientHints = {
+        ...session.clientHints,
+        ...req.body.clientHints
+      };
+    }
+
+    if (req.body.permissions) {
+      session.permissions = {
+        ...session.permissions,
+        ...req.body.permissions
+      };
+    }
+
+    await session.save();
+    console.log(`[SAVE_METADATA] Session ${sessionId} metadata updated successfully`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error(`[SAVE_METADATA] Error updating metadata for session ${sessionId}:`, error);
+    res.status(500).json({ success: false, message: 'Database error saving metadata', details: error.message });
+  }
 };
 
-exports.savePhoto = (req, res) => {
-  const { safeId, sessionDir } = getSessionDir(req.params.sessionId);
+exports.savePhoto = async (req, res) => {
+  const { sessionId } = req.params;
   const { image, facingMode, deviceLabel, takenAt } = req.body;
-  const match = typeof image === 'string'
-    ? image.match(/^data:image\/(png|jpeg|jpg|webp);base64,(.+)$/)
-    : null;
+  console.log(`[SAVE_PHOTO] Request received for session ${sessionId}`);
 
-  if (!match) {
-    res.status(400).json({ success: false, message: 'Invalid image payload' });
-    return;
+  if (typeof image !== 'string' || !image.startsWith('data:image/')) {
+    console.warn(`[SAVE_PHOTO] Invalid image payload for session ${sessionId}`);
+    return res.status(400).json({ success: false, message: 'Invalid image payload' });
   }
 
-  const extension = match[1] === 'jpeg' ? 'jpg' : match[1];
-  const buffer = Buffer.from(match[2], 'base64');
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const fileName = `${timestamp}-${facingMode || 'camera'}.${extension}`;
-  const relativePath = path.join('photos', fileName);
+  try {
+    const session = await Session.findOne({ sessionId });
+    if (!session) {
+      console.warn(`[SAVE_PHOTO] Session ${sessionId} not found`);
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
 
-  fs.writeFileSync(path.join(sessionDir, relativePath), buffer);
+    console.log(`[SAVE_PHOTO] Uploading photo to Cloudinary for session ${sessionId}`);
+    const uploadResult = await uploadImageBase64(image);
+    console.log(`[SAVE_PHOTO] Photo successfully uploaded to Cloudinary: ${uploadResult.cloudinaryUrl}`);
 
-  const metadata = readMetadata(sessionDir);
-  metadata.sessionId = metadata.sessionId || safeId;
-  metadata.updatedAt = new Date().toISOString();
-  metadata.photos = Array.isArray(metadata.photos) ? metadata.photos : [];
-  metadata.photos.push({
-    file: relativePath.replace(/\\/g, '/'),
-    facingMode: facingMode || null,
-    deviceLabel: deviceLabel || null,
-    takenAt: takenAt || metadata.updatedAt
-  });
-  writeMetadata(sessionDir, metadata);
+    session.photos.push({
+      cloudinaryUrl: uploadResult.cloudinaryUrl,
+      publicId: uploadResult.publicId,
+      facingMode: facingMode || null,
+      deviceLabel: deviceLabel || null,
+      takenAt: takenAt ? new Date(takenAt) : new Date()
+    });
 
-  res.json({ success: true, file: relativePath.replace(/\\/g, '/') });
+    await session.save();
+    console.log(`[SAVE_PHOTO] Session ${sessionId} photo entry saved to MongoDB`);
+    res.json({ success: true, url: uploadResult.cloudinaryUrl });
+  } catch (error) {
+    console.error(`[SAVE_PHOTO] Error saving photo for session ${sessionId}:`, error);
+    res.status(500).json({ success: false, message: 'Failed to upload photo or save metadata', details: error.message });
+  }
 };
 
 exports.saveAudioChunk = (req, res) => {
-  const { safeId } = getSessionDir(req.params.sessionId);
+  const { sessionId } = req.params;
   const chunkIndex = String(req.query.index || Date.now()).replace(/[^0-9]/g, '');
+  console.log(`[AUDIO_CHUNK] Received chunk #${chunkIndex} for session ${sessionId}`);
 
   if (!Buffer.isBuffer(req.body) || req.body.length === 0) {
+    console.warn(`[AUDIO_CHUNK] Empty audio chunk received for session ${sessionId}`);
     res.status(400).json({ success: false, message: 'Empty audio chunk' });
     return;
   }
 
-  const session = audioSessions.get(safeId) || {
+  const session = audioSessions.get(sessionId) || {
     chunks: [],
     size: 0,
     contentType: req.get('content-type') || 'audio/webm',
@@ -166,45 +150,57 @@ exports.saveAudioChunk = (req, res) => {
   session.size += req.body.length;
   session.contentType = session.contentType || req.get('content-type') || 'audio/webm';
   session.updatedAt = new Date().toISOString();
-  audioSessions.set(safeId, session);
+  audioSessions.set(sessionId, session);
 
   res.json({ success: true, buffered: session.chunks.length, size: session.size, index: chunkIndex });
 };
 
-exports.finishAudio = (req, res) => {
-  const { safeId, sessionDir } = getSessionDir(req.params.sessionId);
-  const session = audioSessions.get(safeId);
+exports.finishAudio = async (req, res) => {
+  const { sessionId } = req.params;
+  const session = audioSessions.get(sessionId);
+  console.log(`[FINISH_AUDIO] Finalizing audio for session ${sessionId}`);
 
   if (!session || !session.chunks.length) {
-    res.json({ success: true, file: null, message: 'No buffered audio to save' });
+    console.warn(`[FINISH_AUDIO] No buffered audio chunks found for session ${sessionId}`);
+    res.json({ success: true, url: null, message: 'No buffered audio to save' });
     return;
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const fileName = `${timestamp}-recording.webm`;
-  const relativePath = path.join('audio', fileName);
   const sortedChunks = session.chunks
     .slice()
     .sort((a, b) => a.index - b.index)
     .map(chunk => chunk.buffer);
   const audioBuffer = Buffer.concat(sortedChunks, session.size);
+  console.log(`[FINISH_AUDIO] Merged ${session.chunks.length} chunks. Combined buffer size: ${audioBuffer.length} bytes`);
 
-  fs.writeFileSync(path.join(sessionDir, relativePath), audioBuffer);
+  try {
+    const dbSession = await Session.findOne({ sessionId });
+    if (!dbSession) {
+      console.warn(`[FINISH_AUDIO] Session ${sessionId} not found in DB`);
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
 
-  const metadata = readMetadata(sessionDir);
-  metadata.sessionId = metadata.sessionId || safeId;
-  metadata.updatedAt = new Date().toISOString();
-  metadata.audio = {
-    file: relativePath.replace(/\\/g, '/'),
-    size: audioBuffer.length,
-    chunkCount: session.chunks.length,
-    contentType: session.contentType,
-    startedAt: session.startedAt,
-    savedAt: metadata.updatedAt
-  };
-  metadata.audioChunks = [];
-  writeMetadata(sessionDir, metadata);
-  audioSessions.delete(safeId);
+    console.log(`[FINISH_AUDIO] Uploading merged audio buffer to Cloudinary for session ${sessionId}`);
+    const uploadResult = await uploadAudioBuffer(audioBuffer);
+    console.log(`[FINISH_AUDIO] Audio successfully uploaded to Cloudinary: ${uploadResult.cloudinaryUrl}`);
 
-  res.json({ success: true, file: relativePath.replace(/\\/g, '/'), size: audioBuffer.length });
+    dbSession.audio = {
+      cloudinaryUrl: uploadResult.cloudinaryUrl,
+      publicId: uploadResult.publicId,
+      size: audioBuffer.length,
+      chunkCount: session.chunks.length,
+      contentType: session.contentType,
+      startedAt: new Date(session.startedAt),
+      savedAt: new Date()
+    };
+
+    await dbSession.save();
+    audioSessions.delete(sessionId);
+    console.log(`[FINISH_AUDIO] Session ${sessionId} audio entry updated successfully in MongoDB`);
+
+    res.json({ success: true, url: uploadResult.cloudinaryUrl, size: audioBuffer.length });
+  } catch (error) {
+    console.error(`[FINISH_AUDIO] Error completing audio upload for session ${sessionId}:`, error);
+    res.status(500).json({ success: false, message: 'Failed to upload audio or save metadata', details: error.message });
+  }
 };
