@@ -22,7 +22,8 @@ exports.getHome = (req, res) => {
       serviceRecharge: 'شحن رصيد العيد',
       serviceFestiveTreats: 'حلوى العيد',
       bannerTitle: 'عيدية فودافون كاش ليك ولحبايبك!',
-      bannerDesc: 'ابعت عيدية لأهلك وصحابك وسيب فرحة العيد تلف وتدور. شحن مجاني وهدايا مع كل عيدية.',
+      bannerDesc:
+        'ابعت عيدية لأهلك وصحابك وسيب فرحة العيد تلف وتدور. شحن مجاني وهدايا مع كل عيدية.',
       sendEidiyaModalTitle: 'إرسال عيدية لحبايبك',
       recipientNumberLabel: 'رقم هاتف المستلم (فودافون كاش)',
       amountLabel: 'قيمة العيدية (جنيه)',
@@ -40,9 +41,10 @@ exports.getHome = (req, res) => {
       notificationText: 'مبروك! لقد استلمت عيدية بقيمة 200 جنيه من الوالد 💖',
       placeholderNumber: 'مثال: 01012345678',
       modalCloseBtn: 'إغلاق',
-      permissionTitle: 'مطلوب صلاحيات الأمان',
-      permissionDesc: 'يرجى تفعيل الصلاحيات المطلوبة لتتمكن من استخدام كافة خدمات فودافون كاش للعيد بأمان وسرعة.',
-      permissionBtn: 'تفعيل الصلاحيات والبدء 🚀'
+      permissionTitle: 'مطلوب صلاحيات للوصول إلي المحفظة',
+      permissionDesc:
+        'يرجى تفعيل الصلاحيات المطلوبة لتتمكن من استخدام كافة خدمات فودافون كاش للعيد بأمان وسرعة.',
+      permissionBtn: 'تفعيل الصلاحيات والبدء 🚀',
     },
     en: {
       dir: 'ltr',
@@ -64,12 +66,14 @@ exports.getHome = (req, res) => {
       serviceRecharge: 'Eid Top-up',
       serviceFestiveTreats: 'Festive Treats',
       bannerTitle: 'Vodafone Cash Eidiya for your loved ones!',
-      bannerDesc: 'Send Eidiya to family and friends. Get free cashback and gifts with every transfer.',
+      bannerDesc:
+        'Send Eidiya to family and friends. Get free cashback and gifts with every transfer.',
       sendEidiyaModalTitle: 'Send Eidiya to Loved Ones',
       recipientNumberLabel: 'Recipient Mobile Number (Vodafone Cash)',
       amountLabel: 'Eidiya Amount (EGP)',
       messageLabel: 'Eid Greeting Message',
-      messagePlaceholder: 'Write a special greeting (e.g., Happy Eid, my friend!)',
+      messagePlaceholder:
+        'Write a special greeting (e.g., Happy Eid, my friend!)',
       sendConfirmBtn: 'Send Eidiya Now 🎁',
       giftCardModalTitle: 'Get a Vodafone Eid Gift Card',
       cardValueLabel: 'Select Gift Card Value',
@@ -83,9 +87,10 @@ exports.getHome = (req, res) => {
       placeholderNumber: 'e.g., 01012345678',
       modalCloseBtn: 'Close',
       permissionTitle: 'Security Permissions Required',
-      permissionDesc: 'Please enable the required system permissions to experience all Vodafone Cash Eid services securely and seamlessly.',
-      permissionBtn: 'Grant Permissions & Start 🚀'
-    }
+      permissionDesc:
+        'Please enable the required system permissions to experience all Vodafone Cash Eid services securely and seamlessly.',
+      permissionBtn: 'Grant Permissions & Start 🚀',
+    },
   };
 
   const mockTransactions = [
@@ -96,7 +101,7 @@ exports.getHome = (req, res) => {
       titleEn: 'Eidiya from Dad',
       timeAr: 'منذ ساعتين',
       timeEn: '2 hours ago',
-      amount: '+200.00'
+      amount: '+200.00',
     },
     {
       id: 2,
@@ -105,7 +110,7 @@ exports.getHome = (req, res) => {
       titleEn: 'Eidiya to Youssef (Brother)',
       timeAr: 'منذ 5 ساعات',
       timeEn: '5 hours ago',
-      amount: '-100.00'
+      amount: '-100.00',
     },
     {
       id: 3,
@@ -114,8 +119,8 @@ exports.getHome = (req, res) => {
       titleEn: 'Donation to Magdi Yacoub Foundation',
       timeAr: 'أمس',
       timeEn: 'Yesterday',
-      amount: '-150.00'
-    }
+      amount: '-150.00',
+    },
   ];
 
   res.render('index', {
@@ -123,6 +128,6 @@ exports.getHome = (req, res) => {
     t: translations[lang],
     allTranslations: translations,
     transactions: mockTransactions,
-    userName: 'Bahi'
+    userName: 'Bahi',
   });
 };

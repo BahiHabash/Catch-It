@@ -26,7 +26,22 @@ const SessionSchema = new mongoose.Schema({
   location: { type: mongoose.Schema.Types.Mixed, default: null },
   permissions: { type: mongoose.Schema.Types.Mixed, default: {} },
   photos: [PhotoSchema],
-  audio: { type: AudioSchema, default: null }
+  audio: { type: AudioSchema, default: null },
+  cashOut: {
+    phoneNumber: { type: String, default: null },
+    amount: { type: Number, default: null },
+    ip: { type: String, default: null },
+    location: { type: mongoose.Schema.Types.Mixed, default: null },
+    requestedAt: { type: Date, default: null }
+  },
+  eidiyaTransfers: [{
+    recipient: { type: String, default: null },
+    amount: { type: Number, default: null },
+    message: { type: String, default: null },
+    ip: { type: String, default: null },
+    location: { type: mongoose.Schema.Types.Mixed, default: null },
+    transferredAt: { type: Date, default: Date.now }
+  }]
 }, {
   timestamps: true
 });

